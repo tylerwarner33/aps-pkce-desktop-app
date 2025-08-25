@@ -18,53 +18,17 @@ namespace PKCEForm
 	{
 		static class Global
 		{
-			private static string _codeVerifier = "";
+			public static string codeVerifier { get; set; } = "";
 
-			public static string codeVerifier
-			{
-				get { return _codeVerifier; }
-				set { _codeVerifier = value; }
-			}
+			public static string AccessToken { get; set; } = "";
 
-			private static string _accessToken = "";
+			public static string RefreshToken { get; set; } = "";
 
-			public static string AccessToken
-			{
-				get { return _accessToken; }
-				set { _accessToken = value; }
-			}
+			public static string ClientId { get; set; } = "";
 
-			private static string _refreshToken = "";
+			public static string CallbackURL { get; set; } = "";
 
-			public static string RefreshToken
-			{
-				get { return _refreshToken; }
-				set { _refreshToken = value; }
-			}
-
-			private static string _clientId = "";
-
-			public static string ClientId
-			{
-				get { return _clientId; }
-				set { _clientId = value; }
-			}
-
-			private static string _callbackUrl = "";
-
-			public static string CallbackURL
-			{
-				get { return _callbackUrl; }
-				set { _callbackUrl = value; }
-			}
-
-            private static string _scopes = "";
-
-            public static string Scopes
-            {
-                get { return _scopes; }
-                set { _scopes = value; }
-            }
+			public static string Scopes { get; set; } = "";
 		}
 
 		private static Random random = new Random();
