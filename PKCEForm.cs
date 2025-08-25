@@ -1,239 +1,231 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using System.Web;
-using System.Security.Cryptography;
-using System.Text.RegularExpressions;
-using Newtonsoft.Json.Linq;
+﻿using Autodesk.Authentication;
+using Autodesk.Authentication.Model;
+using Autodesk.SDKManager;
+using System.Diagnostics;
 using System.Net;
-using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Web;
 
-namespace PKCEForm
+namespace PKCEForm;
+
+public partial class PKCEForm : Form
 {
-	public partial class Form1 : Form
+	public static class Global
 	{
-		static class Global
+		public static string? CodeVerifier { get; set; }
+
+		public static string? ClientId { get; set; }
+
+		public static string? CallbackURL { get; set; }
+
+		public static ThreeLeggedToken? Token { get; set; }
+
+		public static List<Scopes> Scopes =>
+			[Autodesk.Authentication.Model.Scopes.DataRead, Autodesk.Authentication.Model.Scopes.DataWrite];
+	}
+
+	public static SDKManager SdkManager => SdkManagerBuilder.Create().Build();
+
+	public static AuthenticationClient AuthenticationClient => new(SdkManager);
+
+	public PKCEForm()
+	{
+		InitializeComponent();
+	}
+
+	private async void btn_Login_Click(object sender, EventArgs e)
+	{
+		try
 		{
-			private static string _codeVerifier = "";
+			lbl_Status.Text = "Opening browser for sign-in...";
+			Global.ClientId = Properties.Resources.ClientId
+				?? throw new InvalidOperationException("ClientId is not set in resources.");
+			Global.CallbackURL = Properties.Resources.CallbackUrl
+				?? throw new InvalidOperationException("CallbackUrl is not set in resources.");
 
-			public static string codeVerifier
-			{
-				get { return _codeVerifier; }
-				set { _codeVerifier = value; }
-			}
-
-			private static string _accessToken = "";
-
-			public static string AccessToken
-			{
-				get { return _accessToken; }
-				set { _accessToken = value; }
-			}
-
-			private static string _refreshToken = "";
-
-			public static string RefreshToken
-			{
-				get { return _refreshToken; }
-				set { _refreshToken = value; }
-			}
-
-			private static string _clientId = "";
-
-			public static string ClientId
-			{
-				get { return _clientId; }
-				set { _clientId = value; }
-			}
-
-			private static string _callbackUrl = "";
-
-			public static string CallbackURL
-			{
-				get { return _callbackUrl; }
-				set { _callbackUrl = value; }
-			}
-
-            private static string _scopes = "";
-
-            public static string Scopes
-            {
-                get { return _scopes; }
-                set { _scopes = value; }
-            }
+			Global.CodeVerifier = CreateCodeVerifier(64);
+			Global.Token = await GetAccessTokenAsync(Global.CodeVerifier);
 		}
-
-		private static Random random = new Random();
-		public Form1()
+		catch (Exception ex)
 		{
-			InitializeComponent();
+			lbl_Status.Text = "Login failed.";
+			txt_Result.Text = ex.Message;
 		}
+	}
 
-		private void btn_Login_Click(object sender, EventArgs e)
+	/// <summary>
+	///	Get a three-legged token.
+	/// </summary>
+	/// <remarks>
+	///	References:
+	///	<a href="https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-3-legged-token-pkce/get-3-legged-token-pkce/">
+	///	Autodesk/Docs/Authentication/ThreeLeggedTokenPkce
+	///	</a>
+	///	<a href="https://github.com/autodesk-platform-services/aps-pkce-desktop-app">
+	///	GitHub/Autodesk/PkceDesktopApp
+	///	</a>
+	/// </remarks>
+	public async Task<ThreeLeggedToken> GetAccessTokenAsync(string codeVerifier)
+	{
+		try
 		{
-			string codeVerifier = RandomString(64);
-			string codeChallenge = GenerateCodeChallenge(codeVerifier);
-			Global.codeVerifier = codeVerifier;
-			Global.ClientId = Properties.Resources.ClientId;
-			Global.CallbackURL = Properties.Resources.CallbackUrl;
-            Global.Scopes = Properties.Resources.Scopes;
-            redirectToLogin(codeChallenge);
-			lbl_Status.Text = "Proceed in the browser!";
+			string authorizationCode = await GetAuthorizationCode(codeVerifier);
+
+			ThreeLeggedToken token = await AuthenticationClient.GetThreeLeggedTokenAsync(
+				clientId: Global.ClientId,
+				code: authorizationCode,
+				redirectUri: Global.CallbackURL,
+				codeVerifier: codeVerifier);
+
+			return token;
 		}
-
-		private void redirectToLogin(string codeChallenge)
+		catch (Exception ex)
 		{
-			string[] prefixes =
-			{
-                Global.CallbackURL
-            };
-			System.Diagnostics.Process.Start($"https://developer.api.autodesk.com/authentication/v2/authorize?response_type=code&client_id={Global.ClientId}&redirect_uri={HttpUtility.UrlEncode(Global.CallbackURL)}&scope={Global.Scopes}&prompt=login&code_challenge={codeChallenge}&code_challenge_method=S256");
-			SimpleListenerExample(prefixes);
+			throw;
 		}
+	}
 
-		// This example requires the System and System.Net namespaces.
-		public async Task SimpleListenerExample(string[] prefixes)
+	private async void btn_Refresh_Click(object sender, EventArgs eventArgs)
+	{
+		try
 		{
-			if (!HttpListener.IsSupported)
-			{
-                throw new NotSupportedException("HttpListener is not supported in this context!");
-			}
-			// URI prefixes are required,
-			// for example "http://contoso.com:8080/index/".
-			if (prefixes == null || prefixes.Length == 0)
-				throw new ArgumentException("prefixes");
+			var token = await GetRefreshTokenAsync(Global.Token);
 
-			// Create a listener.
-			HttpListener listener = new HttpListener();
-			// Add the prefixes.
-			foreach (string s in prefixes)
-			{
-				listener.Prefixes.Add(s);
-			}
+			lbl_Status.Text = "You can find your new token below";
+			txt_Result.Text = token.AccessToken;
+			Global.Token = token;
+		}
+		catch (Exception ex)
+		{
+			lbl_Status.Text = "An error occurred!";
+			txt_Result.Text = ex.Message;
+		}
+	}
+
+	/// <summary>
+	///	Refresh a three-legged token.
+	/// </summary>
+	public async Task<ThreeLeggedToken> GetRefreshTokenAsync(ThreeLeggedToken threeLeggedToken)
+	{
+		try
+		{
+			ThreeLeggedToken token = await AuthenticationClient.RefreshTokenAsync(
+				refreshToken: threeLeggedToken.RefreshToken,
+				clientId: Global.ClientId,
+				scopes: Global.Scopes);
+
+			return token;
+		}
+		catch (Exception ex)
+		{
+			throw;
+		}
+	}
+
+	/// <summary>
+	///	Get the PKCE authorization code using HttpListener to login into Autodesk account with credentials.
+	/// </summary>
+	/// <remarks>	
+	///	References:
+	///	<a href="https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-3-legged-token-pkce/get-3-legged-token-pkce/">
+	///	Autodesk/Docs/Authentication/ThreeLeggedTokenPkce
+	///	</a>
+	/// </remarks>
+	private async Task<string> GetAuthorizationCode(string codeVerifier)
+	{
+		try
+		{
+			string codeChallenge = CreateCodeChallenge(codeVerifier);
+
+			if (HttpListener.IsSupported is false)
+				throw new NotSupportedException($"{nameof(HttpListener)} is not supported in this context.");
+
+			// HttpListener requires a trailing slash in the prefix.
+			string prefix = Global.CallbackURL.EndsWith('/')
+				? Global.CallbackURL
+				: Global.CallbackURL + "/";
+
+			using HttpListener listener = new();
+			listener.Prefixes.Add(prefix);
 			listener.Start();
-			//Console.WriteLine("Listening...");
-			// Note: The GetContext method blocks while waiting for a request.
-			HttpListenerContext context = listener.GetContext();
-			HttpListenerRequest request = context.Request;
-			// Obtain a response object.
-			HttpListenerResponse response = context.Response;
 
-			try
-			{
-				string authCode = request.Url.Query.ToString().Split('=')[1];
-				await GetPKCEToken(authCode);
-			}
-			catch (Exception ex)
-			{
-				lbl_Status.Text = "An error occurred!";
-				txt_Result.Text = ex.Message;
-			}
+			var authUrl = AuthenticationClient.Authorize(
+				clientId: Global.ClientId,
+				responseType: ResponseType.Code,
+				redirectUri: Global.CallbackURL, // Must exactly match the registered URL in your APS application.
+				scopes: [Scopes.DataRead, Scopes.DataWrite],
+				prompt: "login",
+				codeChallenge: codeChallenge,
+				codeChallengeMethod: "S256");
 
-			// Construct a response.
-			string responseString = "<HTML><BODY> You can move to the form!</BODY></HTML>";
-			byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
-			// Get a response stream and write the response to it.
-			response.ContentLength64 = buffer.Length;
-			System.IO.Stream output = response.OutputStream;
-			output.Write(buffer, 0, buffer.Length);
-			// You must close the output stream.
-			output.Close();
+			Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
+
+			HttpListenerContext context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromMinutes(5));
+
+			var query = HttpUtility.ParseQueryString(context.Request.Url.Query);
+			string authorizationCode = query["code"]
+				?? throw new NullReferenceException($"Authorization code cannot be null.");
+
+			byte[] buffer = Encoding.UTF8.GetBytes("<html><body>You can return to the app.</body></html>");
+			await context.Response.OutputStream.WriteAsync(buffer);
+
+			context.Response.Close();
 			listener.Stop();
-		}
 
-		public static string RandomString(int length)
+			return authorizationCode;
+		}
+		catch (TimeoutException ex)
 		{
-			const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-			return new string(Enumerable.Repeat(chars, length)
-					.Select(s => s[random.Next(s.Length)]).ToArray());
-
-			//Note: The use of the Random class makes this unsuitable for anything security related, such as creating passwords or tokens.Use the RNGCryptoServiceProvider class if you need a strong random number generator
+			lbl_Status.Text = "Timed out waiting for authorization.";
+			txt_Result.Text = ex.Message;
+			throw;
 		}
-
-		private static string GenerateCodeChallenge(string codeVerifier)
+		catch (HttpListenerException ex)
 		{
-			var sha256 = SHA256.Create();
-			var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(codeVerifier));
-			var b64Hash = Convert.ToBase64String(hash);
-			var code = Regex.Replace(b64Hash, "\\+", "-");
-			code = Regex.Replace(code, "\\/", "_");
-			code = Regex.Replace(code, "=+$", "");
-			return code;
+			lbl_Status.Text = "Access is denied. Check for conflict on local URL ACL list.";
+			txt_Result.Text = ex.Message;
+			throw;
 		}
-
-		private async Task GetPKCEToken(string authCode)
+		catch (Exception ex)
 		{
-			try
-			{
-				var client = new HttpClient();
-				var request = new HttpRequestMessage
-				{
-					Method = HttpMethod.Post,
-					RequestUri = new Uri("https://developer.api.autodesk.com/authentication/v2/token"),
-					Content = new FormUrlEncodedContent(new Dictionary<string, string>
-					{
-							{ "client_id", Global.ClientId },
-							{ "code_verifier", Global.codeVerifier },
-							{ "code", authCode},
-							{ "scope", Global.Scopes },
-							{ "grant_type", "authorization_code" },
-							{ "redirect_uri", Global.CallbackURL }
-					}),
-				};
-
-				using (var response = await client.SendAsync(request))
-				{
-					response.EnsureSuccessStatusCode();
-					string bodystring = await response.Content.ReadAsStringAsync();
-					JObject bodyjson = JObject.Parse(bodystring);
-					lbl_Status.Text = "You can find your token below";
-					txt_Result.Text = Global.AccessToken = bodyjson["access_token"].Value<string>();
-					Global.RefreshToken = bodyjson["refresh_token"].Value<string>();
-				}
-			}
-			catch (Exception ex)
-			{
-				lbl_Status.Text = "An error occurred!";
-				txt_Result.Text = ex.Message;
-			}
+			lbl_Status.Text = "An error occurred!";
+			txt_Result.Text = ex.Message;
+			throw;
 		}
+	}
 
-		private async void btn_Refresh_Click(object sender, EventArgs e)
-		{
-			try
-			{
-				var client = new HttpClient();
-				var request = new HttpRequestMessage
-				{
-					Method = HttpMethod.Post,
-					RequestUri = new Uri("https://developer.api.autodesk.com/authentication/v2/token"),
-					Content = new FormUrlEncodedContent(new Dictionary<string, string>
-					{
-							{ "scope", "data:read" },
-							{ "grant_type", "refresh_token" },
-							{ "refresh_token", Global.RefreshToken },
-							{ "client_id", Global.ClientId }
-					}),
-				};
-				using (var response = await client.SendAsync(request))
-				{
-					response.EnsureSuccessStatusCode();
-					string bodystring = await response.Content.ReadAsStringAsync();
-					JObject bodyjson = JObject.Parse(bodystring);
-					lbl_Status.Text = "You can find your new token below";
-					txt_Result.Text = Global.AccessToken = bodyjson["access_token"].Value<string>();
-					Global.RefreshToken = bodyjson["refresh_token"].Value<string>();
-				}
-			}
-			catch (Exception ex)
-			{
-				lbl_Status.Text = "An error occurred!";
-				txt_Result.Text = ex.Message;
-			}
-		}
+	/// <summary>
+	///	Random string between 43 and 128 characters and must contain only alphanumeric characters and punctuation characters -, ., _, ~.
+	/// </summary>
+	/// <remarks>
+	///	<a href="https://aps.autodesk.com/en/docs/oauth/v2/tutorials/code-challenge/">
+	///   APS/Docs/CodeChallenge
+	///   </a>
+	/// </remarks>
+	private static string CreateCodeChallenge(string codeVerifier)
+	{
+		var hash = SHA256.HashData(Encoding.UTF8.GetBytes(codeVerifier));
+		return Convert.ToBase64String(hash)
+		  .TrimEnd('=')
+		  .Replace('+', '-')
+		  .Replace('/', '_');
+	}
+
+	/// <summary>
+	///	Random string between 43 and 128 characters and must contain only alphanumeric characters and punctuation characters -, ., _, ~.
+	/// </summary>
+	/// <remarks>
+	///	<a href="https://aps.autodesk.com/en/docs/oauth/v2/tutorials/code-challenge/">
+	///   APS/Docs/CodeChallenge
+	///   </a>
+	/// </remarks>
+	public static string CreateCodeVerifier(int length)
+	{
+		if (length is < 43 or > 128)
+			throw new ArgumentOutOfRangeException(nameof(length), "PKCE code verifier length must be between 43 and 128 characters.");
+
+		const string allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
+		return RandomNumberGenerator.GetString(allowed.ToCharArray(), length);
 	}
 }

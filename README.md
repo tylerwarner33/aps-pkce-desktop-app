@@ -65,6 +65,8 @@ Go to properties folder and then double-click on resources and change **client i
 
 3. **Not able to read ACC/BIM 360 data with acquired token**: Make sure to provision the APS App Client ID within the BIM 360 Account, [learn more here](https://aps.autodesk.com/blog/bim-360-docs-provisioning-forge-apps). This requires the Account Admin permission.
 
+4. **Access is denied**: Check for conflict on local URL ACL list. Powershell: `netsh http show urlacl | findstr /i ":8080"`
+
 ## License
 
 This sample is licensed under the terms of the [MIT License](http://opensource.org/licenses/MIT). Please see the [LICENSE](LICENSE) file for full details.

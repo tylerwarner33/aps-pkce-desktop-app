@@ -1,6 +1,6 @@
 ﻿namespace PKCEForm
 {
-	partial class Form1
+	partial class PKCEForm
 	{
 		/// <summary>
 		/// Required designer variable.
