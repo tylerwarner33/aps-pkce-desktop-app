@@ -1,16 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Newtonsoft.Json.Linq;
 using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using System.Web;
-using System.Security.Cryptography;
-using System.Text.RegularExpressions;
-using Newtonsoft.Json.Linq;
+using System.Diagnostics;
 using System.Net;
-using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Web;
 
 namespace PKCEForm
 {
@@ -58,13 +53,13 @@ namespace PKCEForm
 				set { _callbackUrl = value; }
 			}
 
-            private static string _scopes = "";
+			private static string _scopes = "";
 
-            public static string Scopes
-            {
-                get { return _scopes; }
-                set { _scopes = value; }
-            }
+			public static string Scopes
+			{
+				get { return _scopes; }
+				set { _scopes = value; }
+			}
 		}
 
 		private static Random random = new Random();
@@ -80,8 +75,8 @@ namespace PKCEForm
 			Global.codeVerifier = codeVerifier;
 			Global.ClientId = Properties.Resources.ClientId;
 			Global.CallbackURL = Properties.Resources.CallbackUrl;
-            Global.Scopes = Properties.Resources.Scopes;
-            redirectToLogin(codeChallenge);
+			Global.Scopes = Properties.Resources.Scopes;
+			redirectToLogin(codeChallenge);
 			lbl_Status.Text = "Proceed in the browser!";
 		}
 
@@ -89,9 +84,13 @@ namespace PKCEForm
 		{
 			string[] prefixes =
 			{
-                Global.CallbackURL
-            };
-			System.Diagnostics.Process.Start($"https://developer.api.autodesk.com/authentication/v2/authorize?response_type=code&client_id={Global.ClientId}&redirect_uri={HttpUtility.UrlEncode(Global.CallbackURL)}&scope={Global.Scopes}&prompt=login&code_challenge={codeChallenge}&code_challenge_method=S256");
+				Global.CallbackURL
+			};
+
+			Process.Start(new ProcessStartInfo($"https://developer.api.autodesk.com/authentication/v2/authorize?response_type=code&client_id={Global.ClientId}&redirect_uri={HttpUtility.UrlEncode(Global.CallbackURL)}&scope={Global.Scopes}&prompt=login&code_challenge={codeChallenge}&code_challenge_method=S256")
+			{
+				UseShellExecute = true
+			});
 			SimpleListenerExample(prefixes);
 		}
 
@@ -100,7 +99,7 @@ namespace PKCEForm
 		{
 			if (!HttpListener.IsSupported)
 			{
-                throw new NotSupportedException("HttpListener is not supported in this context!");
+				throw new NotSupportedException("HttpListener is not supported in this context!");
 			}
 			// URI prefixes are required,
 			// for example "http://contoso.com:8080/index/".
@@ -124,7 +123,8 @@ namespace PKCEForm
 
 			try
 			{
-				string authCode = request.Url.Query.ToString().Split('=')[1];
+				var query = HttpUtility.ParseQueryString(context.Request.Url.Query);
+				string authCode = query["code"];
 				await GetPKCEToken(authCode);
 			}
 			catch (Exception ex)

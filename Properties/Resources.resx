@@ -118,10 +118,10 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="CallbackUrl" xml:space="preserve">
-    <value>http://localhost:8080/</value>
+    <value>http://localhost:8080/auth/callback</value>
   </data>
   <data name="ClientId" xml:space="preserve">
-    <value>xSBKOWGkAB06S7rWidGFD2m9vznKfMBD02gzOXiyPUYqAbuy</value>
+    <value>eYMzD2vdbYoEsyNoFvWCU9IuiPtmeByJ59GsqPMkovaFLNZ0</value>
   </data>
   <data name="Scopes" xml:space="preserve">
     <value>data:read data:write</value>
